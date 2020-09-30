@@ -7,21 +7,6 @@
 [submodule "tgp-pods-discovery-client-front"]
 	path = tgp-pods-discovery-client-front
 	url = git@github.com:rizalfakhri/tgp-pods-discovery-client-front.git
-[submodule "user-services"]
-	path = services/user-service
-	url = git@github.com:rizalfakhri/tgp-services_user-service.git
-[submodule "discount-services"]
-	path = services/discount-service
-	url = git@github.com:rizalfakhri/tgp-services_discount-service.git
-[submodule "reporting-services"]
-	path = services/reporting-service
-    url = git@github.com:rizalfakhri/tgp-services_reporting-service.git
-[submodule "reporting-services"]
-	path = services/reporting-service
-    url = git@github.com:rizalfakhri/tgp-services_reporting-service.git
-[submodule "pods-services"]
-	path = services/pods-service
-    url = git@github.com:rizalfakhri/tgp-pods-discovery-service.git
 [submodule "services/user-service"]
 	path = services/user-service
 	url = git@github.com:rizalfakhri/tgp-services_user-service.git
@@ -34,3 +19,6 @@
 [submodule "lib/tgp-user-service-auth-sdk"]
 	path = lib/tgp-user-service-auth-sdk
 	url = git@github.com:rizalfakhri/tgp-auth-server-sdk.git
+[submodule "services/pods-service"]
+	path = services/pods-service
+	url = git@github.com:rizalfakhri/tgp-pods-discovery-service.git
