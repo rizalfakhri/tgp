@@ -19,6 +19,6 @@
 [submodule "lib/tgp-user-service-auth-sdk"]
 	path = lib/tgp-user-service-auth-sdk
 	url = git@github.com:rizalfakhri/tgp-auth-server-sdk.git
-[submodule "services/pods-service"]
-	path = services/pods-service
+[submodule "services/tgp-pods-discovery"]
+	path = services/tgp-pods-discovery
 	url = git@github.com:rizalfakhri/tgp-pods-discovery-service.git
