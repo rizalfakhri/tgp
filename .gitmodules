@@ -31,3 +31,6 @@
 [submodule "services/reporting-service"]
 	path = services/reporting-service
 	url = git@github.com:rizalfakhri/tgp-services_reporting-service.git
+[submodule "lib/tgp-user-service-auth-sdk"]
+	path = lib/tgp-user-service-auth-sdk
+	url = git@github.com:rizalfakhri/tgp-auth-server-sdk.git
