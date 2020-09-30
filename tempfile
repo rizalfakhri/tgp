@@ -1,0 +1,11 @@
+submodule.tgp-client-front.path tgp-client-front
+submodule.tgp-discount-service-front.path tgp-discount-service-front
+submodule.tgp-pods-discovery-client-front.path tgp-pods-discovery-client-front
+submodule.user-services.path services/user-service
+submodule.discount-services.path services/discount-service
+submodule.reporting-services.path services/reporting-service
+submodule.reporting-services.path services/reporting-service
+submodule.pods-services.path services/pods-service
+submodule.services/user-service.path services/user-service
+submodule.services/discount-service.path services/discount-service
+submodule.services/reporting-service.path services/reporting-service

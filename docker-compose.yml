@@ -1,0 +1,303 @@
+# In the production, services should not be accessible from outside of network
+# But, for the demo purpose, we're gonna expose the service to the internet, for debugging
+
+version: '3.7'
+
+volumes:
+  tgp_services: {}
+  kong_data: {}
+  user_service_db: {}
+  user_service_redis: {}
+  user_service: {}
+  reporting_service_redis: {}
+  reporting_service: {}
+  discount_service_db: {}
+  discount_service_redis: {}
+  discount_service: {}
+
+networks:
+  # The global network where containers can communicate to each other.
+  tgp:
+    external:
+      name: tgp-network
+  kong-net:
+    external:
+      name: tgp-network
+
+  # The network used by user-service to communicate with service-related containers only.
+  user-service-network:
+    external: false
+
+  # The network used by repoting-service to communicate with service-related containers only.
+  reporting-service-network:
+    external: false
+
+  # The network used by discount-service to communicate with service-related containers only.
+  discount-service-network:
+    external: false
+
+
+services:
+  kong-migrations:
+    image: "${KONG_DOCKER_TAG:-kong:latest}"
+    command: kong migrations bootstrap
+    depends_on:
+      - kong-db
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: ${KONG_PG_DATABASE:-kong}
+      KONG_PG_HOST: kong-db
+      KONG_PG_USER: ${KONG_PG_USER:-kong}
+      KONG_PG_PASSWORD_FILE: /run/secrets/kong_postgres_password
+    secrets:
+      - kong_postgres_password
+    networks:
+      - kong-net
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  kong-migrations-up:
+    image: "${KONG_DOCKER_TAG:-kong:latest}"
+    command: kong migrations up && kong migrations finish
+    depends_on:
+      - kong-db
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: ${KONG_PG_DATABASE:-kong}
+      KONG_PG_HOST: kong-db
+      KONG_PG_USER: ${KONG_PG_USER:-kong}
+      KONG_PG_PASSWORD_FILE: /run/secrets/kong_postgres_password
+    secrets:
+      - kong_postgres_password
+    networks:
+      - kong-net
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  kong:
+    image: "${KONG_DOCKER_TAG:-kong:latest}"
+    user: "${KONG_USER:-kong}"
+    depends_on:
+      - kong-db
+    environment:
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: '0.0.0.0:8001'
+      KONG_CASSANDRA_CONTACT_POINTS: kong-db
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: ${KONG_PG_DATABASE:-kong}
+      KONG_PG_HOST: kong-db
+      KONG_PG_USER: ${KONG_PG_USER:-kong}
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_PG_PASSWORD_FILE: /run/secrets/kong_postgres_password
+    secrets:
+      - kong_postgres_password
+    networks:
+      - kong-net
+    ports:
+      - "8000:8000/tcp"
+      - "127.0.0.1:8001:8001/tcp"
+      - "8443:8443/tcp"
+      - "127.0.0.1:8444:8444/tcp"
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  kong-db:
+    image: postgres:9.5
+    environment:
+      POSTGRES_DB: ${KONG_PG_DATABASE:-kong}
+      POSTGRES_USER: ${KONG_PG_USER:-kong}
+      POSTGRES_PASSWORD_FILE: /run/secrets/kong_postgres_password
+    secrets:
+      - kong_postgres_password
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${KONG_PG_USER:-kong}"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+    stdin_open: true
+    tty: true
+    networks:
+      - kong-net
+    volumes:
+      - kong_data:/var/lib/postgresql/data
+
+  pods-discovery-service-db:
+    image: mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: toor
+    ports:
+      - 27017:27017
+    networks:
+      - tgp
+
+  # Pods Discovery Service
+  pods-discovery-service:
+    build: "services/pods-service"
+    depends_on:
+      - pods-discovery-service-db
+    environment:
+      MONGO_HOST: pods-discovery-service-db
+      MONGO_PORT: 27017
+      MONGO_DATABASE: pods_discovery
+      MONGO_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-root}
+      MONGO_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-toor}
+    restart: always
+    networks:
+      - tgp
+
+  pods-discovery-client-front:
+    build:
+      context: "tgp-pods-discovery"
+      args:
+        PODS_DISCOVERY_SERVICE_ENDPOINT_DEV: ${PODS_DISCOVERY_SERVICE_ENDPOINT_DEV}
+        PODS_DISCOVERY_SERVICE_ENDPOINT_PROD: ${PODS_DISCOVERY_SERVICE_ENDPOINT_PROD}
+    ports:
+      - 8005:3000
+    networks:
+      - tgp
+
+  # User Service
+  user-service-db:
+    image: mysql:5.7
+    ports:
+     - "${USER_SERVICE_MYSQL_PORT}:3306"
+    container_name: user-service-db
+    env_file:
+      - ./services/user-service/.env
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_PASSWORD:-root}"
+      MYSQL_DATABASE: "${DB_DATABASE:-user_service}"
+      MYSQL_USER: "${DB_USERNAME:-user_service}"
+      MYSQL_PASSWORD: "${DB_PASSWORD-p4$sw0rd}"
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+    volumes:
+     - user_service_db:/var/lib/mysql
+     # - ./docker/mysql/conf.d:/etc/mysql/conf.d
+     # - ./docker/mysql/logs:/var/log/mysql
+    networks:
+     - user-service-network
+
+  user-service-redis:
+    image: redis:alpine
+    volumes:
+     - user_service_redis:/data
+    networks:
+     - user-service-network
+
+  user-service:
+    build:
+      context: ./services/user-service/docker/app
+      dockerfile: Dockerfile
+    ports:
+      - "${USER_SERVICE_APP_PORT}:80"
+    depends_on:
+      - user-service-db
+      - user-service-redis
+    volumes:
+     - ./services/user-service:/var/www/html
+    networks:
+     - user-service-network
+     - tgp
+
+  # Reporting Service
+  reporting-service-redis:
+    image: redis:alpine
+    volumes:
+     - reporting_service_redis:/data
+    networks:
+     - reporting-service-network
+
+  reporting-service:
+    build:
+      context: ./services/reporting-service/docker/app
+      dockerfile: Dockerfile
+    ports:
+      - "${REPORTING_SERVICE_APP_PORT}:80"
+    depends_on:
+      - reporting-service-redis
+    volumes:
+     - ./services/reporting-service:/var/www/html
+    networks:
+     - reporting-service-network
+     - tgp
+
+
+  # Discount Service
+  discount-service-db:
+    image: mysql:5.7
+    ports:
+     - "${DISCOUNT_SERVICE_MYSQL_PORT}:3306"
+    container_name: discount-service-db
+    env_file:
+      - ./services/discount-service/.env
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DISCOUNT_SERVICE_DB_PASSWORD:-root}"
+      MYSQL_DATABASE: "${DISCOUNT_SERVICE_DB_DATABASE:-discount_service}"
+      MYSQL_USER: "${DISCOUNT_SERVICE_DB_USERNAME:-discount_service}"
+      MYSQL_PASSWORD: "${DISCOUNT_SERVICE_DB_PASSWORD-p4$sw0rd}"
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+    volumes:
+     - user_service_db:/var/lib/mysql
+     # - ./docker/mysql/conf.d:/etc/mysql/conf.d
+     # - ./docker/mysql/logs:/var/log/mysql
+    networks:
+     - discount-service-network
+
+  discount-service-redis:
+    image: redis:alpine
+    volumes:
+     - discount_service_redis:/data
+    networks:
+     - discount-service-network
+
+  discount-service:
+    build:
+      context: ./services/discount-service/docker/app
+      dockerfile: Dockerfile
+    ports:
+      - "${DISCOUNT_SERVICE_APP_PORT}:80"
+    depends_on:
+      - discount-service-redis
+    volumes:
+     - ./services/discount-service:/var/www/html
+    networks:
+     - discount-service-network
+     - tgp
+
+  discount-service-app-front:
+    build:
+      context: tgp-discount-service-front/
+      dockerfile: Dockerfile
+      args:
+        AUTH_SERVER_ENDPOINT: http://kong:8000/users
+        AUTH_SERVER_CLIENT_ID: ${DISCOUNT_SERVICE_APP_FRONT_CLIENT_ID}
+        AUTH_SERVER_CLIENT_SECRET: ${DISCOUNT_SERVICE_APP_FRONT_CLIENT_SECRET}
+        AUTH_SERVER_REDIRECT_URI: ${DISCOUNT_SERVICE_APP_FRONT_REDIRECT_URI}
+    ports:
+      - "${DISCOUNT_SERVICE_APP_FRONT_PORT}:3000"
+    stdin_open: true
+    tty: true
+
+
+secrets:
+  kong_postgres_password:
+    file: ./POSTGRES_PASSWORD
